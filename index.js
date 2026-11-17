@@ -154,7 +154,7 @@ async function takeover(callSid) {
     if (!call.replay) {
         try {
             await getTwilio().calls(callSid).update({
-                twiml: `<Response><Connect><Stream url="wss://${PUBLIC_HOST}/media-stream"><Parameter name="callSid" value="${xmlEscape(callSid)}"/></Stream></Connect></Response>`,
+                twiml: `<Response><Connect><Stream url="wss://${call.host || PUBLIC_HOST}/media-stream"><Parameter name="callSid" value="${xmlEscape(callSid)}"/></Stream></Connect></Response>`,
             });
         } catch (err) {
             console.error(`[${callSid}] takeover failed:`, err.message);
@@ -284,9 +284,12 @@ fastify.get('/', async (request, reply) => {
 // Incoming call (SPEC §7.1): transcribe the scammer's side, ring grandma.
 fastify.post('/incoming', async (request, reply) => {
     const callSid = request.body?.CallSid;
-    if (callSid) newCall(callSid);
-    console.log(`[${callSid}] incoming call`);
-    const host = PUBLIC_HOST || request.headers.host;
+    // Trust the host Twilio actually reached us on: a stale PUBLIC_HOST in .env
+    // (ngrok restarted) would otherwise send transcripts and the takeover stream nowhere.
+    const reached = request.headers.host || '';
+    const host = reached && !/^(localhost|127\.|\[::1\])/.test(reached) ? reached : PUBLIC_HOST;
+    if (callSid) newCall(callSid, { host });
+    console.log(`[${callSid}] incoming call via ${host}`);
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
@@ -615,4 +618,8 @@ fastify.listen({ port: PORT }, (err) => {
     }
     console.log(`Server is listening on port ${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}/`);
+    const unset = Object.entries({ PUBLIC_HOST, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMBER, GRANDMA_PHONE, FAMILY_PHONE })
+        .filter(([, v]) => !v || v === '+1' || v.startsWith('xxxx'))
+        .map(([k]) => k);
+    if (unset.length) console.warn(`Not set in .env (replay still works, real calls will not): ${unset.join(', ')}`);
 });
