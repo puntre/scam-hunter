@@ -39,7 +39,11 @@ signals: any of these that the caller has clearly shown in these lines:
 - "urgency_or_threat": threatens arrest, lawsuits, account closure, or demands action right now.
 - "secrecy": tells her not to hang up or not to tell family or the bank.
 
-score: 0-100, how likely this call is a scam. Routine, friendly calls with no demands score under 20.
+score: 0-100, how likely this call is a scam, judged only on what the caller has said so far:
+- under 20: routine, friendly call with no demands.
+- 30-50: the caller only claims an identity (even a government agency), with no demand or threat yet. One sentence of introduction is never enough to go higher.
+- 55-75: an identity claim plus a threat, pressure or secrecy, but no request for money, codes or account details yet.
+- 80-100: the caller has asked for payment by an unusual method, or for a code, card or account number, or for remote access.
 reason: at most 8 words.`;
 
 export async function detect(lines) {
