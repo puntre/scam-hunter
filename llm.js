@@ -62,6 +62,11 @@ const SUMMARY_PROMPT = `You are given the transcript of a scam phone call. "scam
 Reply with JSON only:
 {"summary": "2 sentences on what the caller tried", "claimedAgency": "", "paymentMethod": "", "callbackNumber": "", "amountRequested": ""}
 
+Write each field the way a person would say it aloud in the middle of a sentence:
+- claimedAgency: with its article, e.g. "the Internal Revenue Service", "her bank's fraud department".
+- paymentMethod: lower case, e.g. "gift cards", "a wire transfer".
+- callbackNumber: formatted like 202-555-0147.
+- amountRequested: with currency, e.g. "$3,400".
 Use "unknown" for anything the caller never said. Only report what is in the transcript.`;
 
 export async function summarize(transcript) {

@@ -215,7 +215,8 @@ async function cleanup(call) {
 
     // 3. Fo task: text a family member would send Fo
     action('fo_task', 'running');
-    const foText = `Call Grandma Rose's bank at [number on the back of her card] and flag her card; she received a scam call from someone claiming to be ${agency} asking for ${payment}${known(amountRequested, '') ? ` (${amountRequested})` : ''}. She did not give out any details.`;
+    const ask = known(amountRequested, '') ? `${amountRequested} in ${payment}` : payment;
+    const foText = `Call Grandma Rose's bank at [number on the back of her card] and flag her card. She received a scam call from someone claiming to be ${agency}, asking for ${ask}. She did not give out any details.`;
     if (FO_MODE === 'real' && FO_ENDPOINT) {
         try {
             const res = await fetch(FO_ENDPOINT, {
