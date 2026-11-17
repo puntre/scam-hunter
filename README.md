@@ -106,14 +106,6 @@ Point the number's "A call comes in" webhook at `POST https://<host>/incoming` a
 - A detector error never triggers a takeover; the dashboard tells the operator to use the **Take over** button.
 - Only use this with people who have agreed to be on the call.
 
-## Known limits
-
-- On a browser call, Grandma is a person in the room, and her words are not shown on the dashboard.
-- If Rose's voice leaks from the speaker back into the microphone, she can interrupt herself. Earbuds, or holding the phone to the ear, avoids it.
-- If Fo stops to ask a question, nobody can answer it from the dashboard and the alert shows as failed.
-- The takeover can land one sentence earlier or later from run to run.
-- Call state lives in memory. Restarting the server clears it.
-
 ## More
 
 - `SPEC.md`: the original 3-hour build plan.
