@@ -176,15 +176,20 @@ async function alertFamilyViaFo(call) {
     const why = (call.reason || 'a suspected scam').replace(/["\n]/g, ' ').trim();
     let request = '';
     try {
-        request = `Text ${allowedNumber(FAMILY_PHONE)} right now with this message: "Scam Hunter alert: a scam caller just targeted Grandma Rose (${why}). She is off the call and safe, and she gave nothing away." Send it straight away without asking me to confirm, and do not contact anyone else. Then tell me in one short sentence that it was sent.`;
+        request = `Text ${allowedNumber(FAMILY_PHONE)} right now with this message: "Scam Hunter alert: a scam caller just targeted Grandma Rose (${why}). She is off the call and safe, and she gave nothing away." Send it straight away without asking me to confirm, and do not contact anyone else. If it was sent, start your reply with the single word SENT. If anything stopped it, say what.`;
         if (call.replay || FO_MODE !== 'real') {
             fo('done', call.replay ? 'Replay: not sent to Fo.' : 'FO_MODE is mock: paste this into Fo.');
             return;
         }
         fo('running', 'Asking Fo to text the family…');
         const reply = await askFo(request, (progress) => fo('running', progress));
-        call.foAlerted = true;
-        fo('done', reply);
+        // Fo can come back with a question or a setup problem instead of sending.
+        if (/^\W*SENT\b/i.test(reply)) {
+            call.foAlerted = true;
+            fo('done', 'Fo texted the family.');
+        } else {
+            fo('failed', reply.slice(0, 280));
+        }
     } catch (err) {
         console.error(`[${callSid}] Fo error:`, err.message);
         fo('failed', err.message);
