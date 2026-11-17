@@ -4,6 +4,8 @@ Scam Hunter catches a phone scam mid-call, swaps Grandma out for an AI that keep
 
 Built in a hackathon for the Wajo Fo track.
 
+![The Scam Hunter dashboard after a call: the caller's words, a scam score of 100, the takeover banner, Rose's replies, and Fo's confirmation that it texted the family](docs/dashboard.png)
+
 ## What happens in a call
 
 1. A caller rings Grandma Rose. The dashboard shows the caller's words live.

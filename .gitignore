@@ -135,3 +135,6 @@ dist
 
 # Fo login tokens
 .fo-auth.json
+
+# Raw screenshot shows a real phone number; docs/dashboard.png is the covered copy
+scshot.png
