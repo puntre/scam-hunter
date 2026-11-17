@@ -62,7 +62,9 @@ const SUMMARY_PROMPT = `You are given the transcript of a scam phone call. "scam
 Reply with JSON only:
 {"summary": "2 sentences on what the caller tried", "claimedAgency": "", "paymentMethod": "", "callbackNumber": "", "amountRequested": ""}
 
-Write each field the way a person would say it aloud in the middle of a sentence:
+summary: plain words for a family member. Call the target "Grandma Rose" and the caller "the caller" (never "he" or "she", never "the target" or "the scammer"). Say what the caller claimed and what they demanded. If "rose" appears, end by saying the AI took over and nothing was given away.
+
+Write each other field the way a person would say it aloud in the middle of a sentence:
 - claimedAgency: with its article, e.g. "the Internal Revenue Service", "her bank's fraud department".
 - paymentMethod: lower case, e.g. "gift cards", "a wire transfer".
 - callbackNumber: formatted like 202-555-0147.
