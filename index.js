@@ -152,7 +152,7 @@ async function takeover(callSid) {
     const call = calls.get(callSid);
     if (!call || call.takenOver || call.state === 'ended') return false;
     call.takenOver = true; // at most once per call
-    if (!call.replay) {
+    if (!call.replay && !call.browser) {
         try {
             await getTwilio().calls(callSid).update({
                 twiml: `<Response><Connect><Stream url="wss://${call.host || PUBLIC_HOST}/media-stream"><Parameter name="callSid" value="${xmlEscape(callSid)}"/></Stream></Connect></Response>`,
@@ -163,6 +163,7 @@ async function takeover(callSid) {
             return false;
         }
     }
+    call.onTakeover?.(); // browser call: Rose starts talking on the open stream
     setState(call, 'takeover');
     call.foDone = alertFamilyViaFo(call); // Fo starts working while Rose stalls the caller
     return true;
@@ -227,11 +228,14 @@ async function cleanup(call) {
     const payment = known(paymentMethod, 'money');
 
     // 2. Family alert by voice call, only if Fo did not already alert the family at takeover.
-    await Promise.race([call.foDone, sleep(15000)]); // give Fo a moment to finish before deciding
+    await Promise.race([call.foDone, sleep(call.browser ? 90000 : 15000)]); // give Fo time to finish before deciding
     if (call.foAlerted) {
         action('family_alert', 'done', 'Not needed: Fo already alerted the family');
     } else if (call.replay) {
         action('family_alert', 'done', 'Replay: family call skipped');
+    } else if (call.browser) {
+        if (FO_MODE === 'real') action('family_alert', 'failed', 'No phone line on a browser call, and Fo did not confirm its text');
+        else action('family_alert', 'done', 'Skipped: FO_MODE is mock, so nobody was contacted');
     } else {
         action('family_alert', 'running');
         try {
@@ -290,6 +294,12 @@ async function runReplay(call, lines) {
 // Dashboard page
 fastify.get('/', async (request, reply) => {
     const html = await readFile(new URL('./public/dashboard.html', import.meta.url), 'utf8');
+    reply.type('text/html').send(html);
+});
+
+// Browser "phone" for the caller: no phone network needed
+fastify.get('/call', async (request, reply) => {
+    const html = await readFile(new URL('./public/call.html', import.meta.url), 'utf8');
     reply.type('text/html').send(html);
 });
 
@@ -395,12 +405,18 @@ fastify.register(async (fastify) => {
         });
 
         // Control initial session with OpenAI
-        const initializeSession = () => {
-            const call = calls.get(callSid);
-            const soFar = (call?.transcript || [])
+        const roseInstructions = () => {
+            const soFar = (calls.get(callSid)?.transcript || [])
                 .filter((l) => l.speaker === 'scammer')
                 .map((l) => `- ${l.text}`)
                 .join('\n');
+            return `${SYSTEM_MESSAGE}\n\nHere is what the caller said so far:\n${soFar || '(nothing yet)'}`;
+        };
+
+        const initializeSession = () => {
+            const call = calls.get(callSid);
+            // Browser call before takeover: transcribe the caller, but Rose stays silent.
+            const listenOnly = Boolean(call?.browser && !call.takenOver);
 
             const sessionUpdate = {
                 type: 'session.update',
@@ -409,10 +425,10 @@ fastify.register(async (fastify) => {
                     model: REALTIME_MODEL,
                     output_modalities: ["audio"],
                     audio: {
-                        input: { format: { type: 'audio/pcmu' }, turn_detection: { type: "server_vad" } },
+                        input: { format: { type: 'audio/pcmu' }, turn_detection: listenOnly ? { type: "server_vad", create_response: false } : { type: "server_vad" } },
                         output: { format: { type: 'audio/pcmu' }, voice: VOICE },
                     },
-                    instructions: `${SYSTEM_MESSAGE}\n\nHere is what the caller said so far:\n${soFar || '(nothing yet)'}`,
+                    instructions: roseInstructions(),
                 },
             };
 
@@ -426,7 +442,15 @@ fastify.register(async (fastify) => {
                 session: { type: 'realtime', audio: { input: { transcription: { model: 'gpt-4o-mini-transcribe' } } } },
             }));
 
-            sendInitialConversationItem();
+            if (!listenOnly) return sendInitialConversationItem();
+            call.onTakeover = () => {
+                if (openAiWs.readyState !== WebSocket.OPEN) return;
+                openAiWs.send(JSON.stringify({
+                    type: 'session.update',
+                    session: { type: 'realtime', instructions: roseInstructions(), audio: { input: { turn_detection: { type: 'server_vad', create_response: true, interrupt_response: true } } } },
+                }));
+                sendInitialConversationItem();
+            };
         };
 
         // Start the session once both sockets are ready (we need callSid for the transcript)
@@ -553,7 +577,8 @@ fastify.register(async (fastify) => {
                 // Wait a moment so Twilio's copy of the same line can win.
                 if (response.type === 'conversation.item.input_audio_transcription.completed' && response.transcript?.trim()) {
                     const text = response.transcript.trim();
-                    setTimeout(() => {
+                    if (calls.get(callSid)?.browser) handleScammerLine(callSid, text); // the only transcript source on a browser call
+                    else setTimeout(() => {
                         const call = calls.get(callSid);
                         if (call && !call.twilioAfterTakeover) handleScammerLine(callSid, text);
                     }, 3000);
@@ -584,6 +609,10 @@ fastify.register(async (fastify) => {
                         streamSid = data.start.streamSid;
                         callSid = data.start.customParameters?.callSid || data.start.callSid || '';
                         console.log('Incoming stream has started', streamSid, 'for call', callSid);
+                        if (data.start.customParameters?.browser && callSid && !calls.has(callSid)) {
+                            const call = newCall(callSid, { browser: true });
+                            setTimeout(() => { if (call.state === 'ringing') setState(call, 'live'); }, 1200);
+                        }
 
                         // Reset start and media timestamp on a new stream
                         responseStartTimestampTwilio = null;
@@ -630,8 +659,9 @@ fastify.listen({ port: PORT }, (err) => {
     }
     console.log(`Server is listening on port ${PORT}`);
     console.log(`Dashboard: http://localhost:${PORT}/`);
+    console.log(`Caller's phone page: http://localhost:${PORT}/call (or https://<your ngrok host>/call on another device)`);
     const unset = Object.entries({ PUBLIC_HOST, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMBER, GRANDMA_PHONE, FAMILY_PHONE })
         .filter(([, v]) => !v || v === '+1' || v.startsWith('xxxx'))
         .map(([k]) => k);
-    if (unset.length) console.warn(`Not set in .env (replay still works, real calls will not): ${unset.join(', ')}`);
+    if (unset.length) console.warn(`Not set in .env (replay and browser calls still work, Twilio phone calls will not): ${unset.join(', ')}`);
 });

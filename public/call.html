@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone</title>
+<style>
+  :root { --bg: #0a0e15; --surface: #121925; --rule: #25324b; --text: #eef2fb; --dim: #9ba8c3; --green: #2fbf86; --red: #cf2740; --blue: #6cb4ff; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 20px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px 16px; text-align: center; }
+  ::selection { background: var(--blue); color: var(--bg); }
+  h1 { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em; }
+  #status { margin: 0; font-size: 22px; color: var(--dim); min-height: 1.4em; }
+  #timer { font-size: 22px; font-variant-numeric: tabular-nums; color: var(--dim); min-height: 1.4em; }
+  #btn { width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer; background: var(--green); color: #04130c;
+         font: inherit; font-size: 22px; font-weight: 800; transition: background .15s, transform .1s; }
+  #btn:hover { filter: brightness(1.08); }
+  #btn:active { transform: scale(.97); }
+  #btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 5px; }
+  #btn.live { background: var(--red); color: #fff; }
+  #level { width: 220px; height: 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--rule); overflow: hidden; }
+  #level div { height: 100%; width: 0; background: var(--green); transition: width .08s linear; }
+  #hint { margin: 0; max-width: 34ch; font-size: 16px; color: var(--dim); text-wrap: balance; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<h1>Grandma Rose</h1>
+<p id="status" role="status">Ready to call</p>
+<div id="timer"></div>
+<button id="btn">Call</button>
+<div id="level" aria-hidden="true"><div></div></div>
+<p id="hint">Tap Call, allow the microphone, then speak as the caller. Hold the phone as you would on a real call.</p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const RATE = 8000;
+let ws, ctx, stream, proc, tick, started;
+let nextTime = 0;
+const playing = new Set();
+let markTimers = [];
+
+// G.711 mu-law, the format the server and the AI voice use.
+function lin2mu(pcm) {
+  const sign = pcm < 0 ? 0x80 : 0;
+  if (pcm < 0) pcm = -pcm;
+  if (pcm > 32635) pcm = 32635;
+  pcm += 132;
+  let exp = 7;
+  for (let mask = 0x4000; (pcm & mask) === 0 && exp > 0; exp--, mask >>= 1) {}
+  return ~(sign | (exp << 4) | ((pcm >> (exp + 3)) & 0x0f)) & 0xff;
+}
+function mu2lin(u) {
+  u = ~u & 0xff;
+  const s = ((((u & 0x0f) << 3) + 132) << ((u >> 4) & 7)) - 132;
+  return u & 0x80 ? -s : s;
+}
+const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+function setStatus(text) { $('status').textContent = text; }
+
+async function startCall() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch {
+    setStatus('Microphone blocked. Allow it and try again.');
+    return;
+  }
+  try { ctx = new AudioContext({ sampleRate: RATE }); } catch { ctx = new AudioContext(); }
+  await ctx.resume();
+  const callSid = 'WEB-' + Date.now();
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/media-stream');
+  setStatus('Calling…');
+  $('btn').textContent = 'Hang up';
+  $('btn').className = 'live';
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ event: 'start', start: { streamSid: callSid, callSid, customParameters: { callSid, browser: '1' } } }));
+    started = Date.now();
+    tick = setInterval(() => {
+      const s = Math.floor((Date.now() - started) / 1000);
+      $('timer').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    }, 500);
+    setTimeout(() => { if (ws && ws.readyState === 1) setStatus('Connected'); }, 1200);
+    startMic(callSid);
+  };
+  ws.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    if (ev.event === 'media') play(fromB64(ev.media.payload));
+    if (ev.event === 'clear') stopPlayback();
+    if (ev.event === 'mark') {
+      const wait = Math.max(0, (nextTime - ctx.currentTime) * 1000);
+      markTimers.push(setTimeout(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event: 'mark', streamSid: callSid, mark: ev.mark })); }, wait));
+    }
+  };
+  ws.onclose = () => endCall('Call ended');
+  ws.onerror = () => endCall('Could not connect. Is the server running?');
+}
+
+function startMic(callSid) {
+  const source = ctx.createMediaStreamSource(stream);
+  proc = ctx.createScriptProcessor(1024, 1, 1);
+  const step = ctx.sampleRate / RATE; // 1 when the browser gave us an 8 kHz context
+  let pos = 0, frame = [], ts = 0;
+  proc.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0);
+    let peak = 0;
+    for (; pos < input.length; pos += step) {
+      const v = input[Math.floor(pos)];
+      peak = Math.max(peak, Math.abs(v));
+      frame.push(lin2mu(Math.round(Math.max(-1, Math.min(1, v)) * 32767)));
+      if (frame.length === 160) {
+        ts += 20;
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event: 'media', streamSid: callSid, media: { timestamp: ts, payload: toB64(frame) } }));
+        frame = [];
+      }
+    }
+    pos -= input.length;
+    $('level').firstElementChild.style.width = Math.min(100, peak * 160) + '%';
+  };
+  source.connect(proc);
+  proc.connect(ctx.destination); // needed for the processor to run; it outputs silence
+}
+
+function play(bytes) {
+  const buf = ctx.createBuffer(1, bytes.length, RATE);
+  const out = buf.getChannelData(0);
+  for (let i = 0; i < bytes.length; i++) out[i] = mu2lin(bytes[i]) / 32768;
+  const node = ctx.createBufferSource();
+  node.buffer = buf;
+  node.connect(ctx.destination);
+  nextTime = Math.max(nextTime, ctx.currentTime + 0.06);
+  node.start(nextTime);
+  nextTime += buf.duration;
+  playing.add(node);
+  node.onended = () => playing.delete(node);
+}
+
+function stopPlayback() {
+  playing.forEach((n) => { try { n.stop(); } catch {} });
+  playing.clear();
+  markTimers.forEach(clearTimeout);
+  markTimers = [];
+  nextTime = 0;
+}
+
+function endCall(message) {
+  if (!ws && !stream) return;
+  clearInterval(tick);
+  stopPlayback();
+  if (proc) proc.disconnect();
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  if (ws && ws.readyState <= 1) { ws.onclose = null; ws.close(); }
+  if (ctx) ctx.close();
+  ws = stream = proc = ctx = null;
+  setStatus(message);
+  $('btn').textContent = 'Call';
+  $('btn').className = '';
+  $('level').firstElementChild.style.width = '0';
+}
+
+$('btn').onclick = () => (ws ? endCall('Call ended') : startCall());
+</script>
+</body>
+</html>
