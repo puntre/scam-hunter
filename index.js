@@ -263,9 +263,9 @@ async function runReplay(call, lines) {
         if (activeReplay !== call) return; // a newer replay replaced this one
         if (line.speaker === 'scammer') {
             await handleScammerLine(call.callSid, line.text);
-        } else {
-            // Grandma's side: once taken over, the same lines are Rose's.
-            addUtterance(call, call.takenOver ? 'rose' : 'grandma', line.text);
+        } else if ((line.speaker === 'rose') === call.takenOver) {
+            // Grandma's lines only play before the takeover, Rose's only after it.
+            addUtterance(call, line.speaker, line.text);
         }
     }
     await sleep(2000);

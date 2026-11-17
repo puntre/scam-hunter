@@ -7,10 +7,10 @@
     { "speaker": "grandma", "text": "A warrant? Oh my goodness." },
     { "speaker": "scammer", "text": "You must settle this today or the police will be at your home within the hour. Do not hang up and do not tell anyone about this call." },
     { "speaker": "scammer", "text": "The only way to stop the warrant is to go to the store right now, buy gift cards for the full amount, and read me the numbers on the back." },
-    { "speaker": "grandma", "text": "Sorry dear, I dropped the phone. Who did you say this was?" },
+    { "speaker": "rose", "text": "Sorry dear, I dropped the phone. Who did you say this was?" },
     { "speaker": "scammer", "text": "This is the IRS, ma'am. You need to buy the gift cards right now. Stay on the line with me." },
-    { "speaker": "grandma", "text": "Gift cards... are those the ones with the little cat on them? My Whiskers would like those." },
+    { "speaker": "rose", "text": "Gift cards... are those the ones with the little cat on them? My Whiskers would like those." },
     { "speaker": "scammer", "text": "Ma'am, focus. When you have the cards, call me back directly at 2 0 2 5 5 5 0 1 4 7 and read me the codes." },
-    { "speaker": "grandma", "text": "Let me find my pen, dear. Was that a seven or an eleven?" }
+    { "speaker": "rose", "text": "Let me find my pen, dear. Was that a seven or an eleven?" }
   ]
 }
