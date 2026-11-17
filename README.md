@@ -12,6 +12,10 @@ Built in a hackathon for the Wajo Fo track.
 4. At that same moment, the server asks Fo to text Grandma's family that she was targeted and is safe.
 5. When the caller hangs up, the dashboard shows a summary of what the caller claimed and wanted, and a fraud report draft. The draft is never submitted anywhere.
 
+The texts Fo sent to the family phone during our test calls:
+
+<img src="docs/fo-family-text.jpg" alt="Three Scam Hunter alert texts from Fo on the family phone, each saying a scam caller targeted Grandma Rose and that she is off the call and safe" width="320">
+
 ## How it works
 
 | Piece | What it does |
