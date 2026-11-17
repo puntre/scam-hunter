@@ -141,8 +141,9 @@ async function handleScammerLine(callSid, text) {
         const strongSeen = STRONG_SIGNALS.filter((s) => call.signals.has(s)).length;
         if (strongSeen >= 2 || result.score >= 80) await takeover(callSid);
     } catch (err) {
-        // Errors never trigger; the last score stays on screen.
+        // Errors never trigger; the last score stays on screen, with a note for the operator.
         console.error(`[${callSid}] detector error:`, err.message);
+        emit({ type: 'score', callSid, score: call.score, signals: [...call.signals], reason: 'Detector not responding. Use Take over.' });
     }
 }
 
