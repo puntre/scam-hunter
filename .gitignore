@@ -132,3 +132,6 @@ dist
 # Impeccable per-developer state
 .impeccable/config.local.json
 .impeccable/hook.cache.json
+
+# Fo login tokens
+.fo-auth.json

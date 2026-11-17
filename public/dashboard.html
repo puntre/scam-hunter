@@ -136,7 +136,9 @@
   #fo.ready { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
   #fo.ready h2 { color: var(--blue); }
   #foText { margin: 0 0 14px; white-space: pre-wrap; }
-  #fo.ready #foText { font-size: 22px; font-weight: 600; line-height: 1.35; }
+  #foStatus { margin: 0 0 10px; font-size: 24px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+  #fo.failed #foStatus { color: var(--red); }
+  #fo.ready #foText { font-size: 17px; line-height: 1.4; color: var(--dim); }
   #fo.ready #copyBtn { background: var(--blue); border-color: var(--blue); color: var(--bg); }
   #fo.ready #copyBtn:hover { background: #8cc5ff; border-color: #8cc5ff; }
 
@@ -211,8 +213,9 @@
 
     <section id="fo">
       <h2>Fo task</h2>
-      <p id="foText" class="empty">A ready-to-send task for Fo appears here.</p>
-      <button id="copyBtn" disabled>Copy</button>
+      <p id="foStatus" hidden></p>
+      <p id="foText" class="empty">When Rose takes the call, Fo texts the family.</p>
+      <button id="copyBtn" disabled>Copy request</button>
     </section>
 
     <section>
@@ -227,7 +230,7 @@ const $ = (id) => document.getElementById(id);
 const STRONG = ['impersonation', 'unusual_payment', 'code_or_remote_access'];
 const STEPS = ['ringing', 'live', 'takeover', 'ended'];
 const NAMES = { scammer: 'Caller', grandma: 'Grandma', rose: 'Rose (AI)' };
-const ACTIONS = { family_alert: 'Call the family', fo_task: 'Prepare the Fo task', report_draft: 'Draft the fraud report' };
+const ACTIONS = { fo_task: 'Fo texts the family', family_alert: 'Call the family', report_draft: 'Draft the fraud report' };
 const INTEL_LABELS = { claimedAgency: 'Claimed to be', paymentMethod: 'Payment', amountRequested: 'Amount', callbackNumber: 'Callback number' };
 const ICONS = {
   pending: '<svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="9" opacity=".5"/></svg>',
@@ -294,7 +297,8 @@ function reset(newSid) {
   $('actions').replaceChildren();
   Object.keys(ACTIONS).forEach((kind) => setAction(kind, 'pending'));
   $('fo').className = '';
-  $('foText').textContent = 'A ready-to-send task for Fo appears here.';
+  $('foStatus').hidden = true;
+  $('foText').textContent = 'When Rose takes the call, Fo texts the family.';
   $('foText').className = 'empty';
   $('copyBtn').disabled = true;
   $('takeoverBtn').disabled = true;
@@ -354,11 +358,13 @@ function handle(ev) {
 
   if (ev.type === 'action') {
     setAction(ev.kind, ev.status, ev.detail);
-    if (ev.kind === 'fo_task' && ev.detail) {
-      $('fo').className = 'ready';
-      $('foText').textContent = ev.detail;
+    if (ev.kind === 'fo_task') {
+      $('fo').className = 'ready' + (ev.status === 'failed' ? ' failed' : '');
+      $('foStatus').hidden = !ev.detail;
+      $('foStatus').textContent = ev.detail || '';
+      $('foText').textContent = ev.request ? 'Asked Fo: ' + ev.request : '';
       $('foText').className = '';
-      $('copyBtn').disabled = false;
+      $('copyBtn').disabled = !ev.request;
       $('fo').scrollIntoView({ block: 'nearest' });
     }
   }
@@ -380,12 +386,12 @@ $('takeoverBtn').onclick = () => {
 $('replayBtn').onclick = () => fetch('/api/replay/irs', { method: 'POST' });
 $('copyBtn').onclick = async () => {
   try {
-    await navigator.clipboard.writeText($('foText').textContent);
+    await navigator.clipboard.writeText($('foText').textContent.replace(/^Asked Fo: /, ''));
     $('copyBtn').textContent = 'Copied';
   } catch {
     $('copyBtn').textContent = 'Select the text and copy';
   }
-  setTimeout(() => { $('copyBtn').textContent = 'Copy'; }, 1500);
+  setTimeout(() => { $('copyBtn').textContent = 'Copy request'; }, 1500);
 };
 </script>
 </body>

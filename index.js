@@ -6,6 +6,7 @@ import fastifyWs from '@fastify/websocket';
 import twilio from 'twilio';
 import { readFile } from 'node:fs/promises';
 import { detect, summarize, STRONG_SIGNALS } from './llm.js';
+import { askFo } from './fo.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -19,7 +20,6 @@ const {
     GRANDMA_PHONE,
     FAMILY_PHONE,
     FO_MODE = 'mock',
-    FO_ENDPOINT,
 } = process.env;
 const REALTIME_MODEL = process.env.REALTIME_MODEL || 'gpt-realtime';
 
@@ -164,7 +164,31 @@ async function takeover(callSid) {
         }
     }
     setState(call, 'takeover');
+    call.foDone = alertFamilyViaFo(call); // Fo starts working while Rose stalls the caller
     return true;
+}
+
+// The Fo track: the moment Rose takes the call, Fo texts the family.
+// Fo acts without asking back only when the request names the channel and the number.
+async function alertFamilyViaFo(call) {
+    const { callSid } = call;
+    const fo = (status, detail) => emit({ type: 'action', callSid, kind: 'fo_task', status, detail, request });
+    const why = (call.reason || 'a suspected scam').replace(/["\n]/g, ' ').trim();
+    let request = '';
+    try {
+        request = `Text ${allowedNumber(FAMILY_PHONE)} right now with this message: "Scam Hunter alert: a scam caller just targeted Grandma Rose (${why}). She is off the call and safe, and she gave nothing away." Send it straight away without asking me to confirm, and do not contact anyone else. Then tell me in one short sentence that it was sent.`;
+        if (call.replay || FO_MODE !== 'real') {
+            fo('done', call.replay ? 'Replay: not sent to Fo.' : 'FO_MODE is mock: paste this into Fo.');
+            return;
+        }
+        fo('running', 'Asking Fo to text the family…');
+        const reply = await askFo(request, (progress) => fo('running', progress));
+        call.foAlerted = true;
+        fo('done', reply);
+    } catch (err) {
+        console.error(`[${callSid}] Fo error:`, err.message);
+        fo('failed', err.message);
+    }
 }
 
 function endCall(callSid) {
@@ -197,11 +221,14 @@ async function cleanup(call) {
     const agency = known(claimedAgency, 'an official agency');
     const payment = known(paymentMethod, 'money');
 
-    // 2. Family alert: a voice call to FAMILY_PHONE
-    action('family_alert', 'running');
-    if (call.replay) {
+    // 2. Family alert by voice call, only if Fo did not already alert the family at takeover.
+    await Promise.race([call.foDone, sleep(15000)]); // give Fo a moment to finish before deciding
+    if (call.foAlerted) {
+        action('family_alert', 'done', 'Not needed: Fo already alerted the family');
+    } else if (call.replay) {
         action('family_alert', 'done', 'Replay: family call skipped');
     } else {
+        action('family_alert', 'running');
         try {
             await getTwilio().calls.create({
                 to: allowedNumber(FAMILY_PHONE),
@@ -214,29 +241,7 @@ async function cleanup(call) {
         }
     }
 
-    // 3. Fo task: text a family member would send Fo
-    action('fo_task', 'running');
-    const ask = known(amountRequested, '') ? `${amountRequested} in ${payment}` : payment;
-    const foText = `Call Grandma Rose's bank at [number on the back of her card] and flag her card. She received a scam call from someone claiming to be ${agency}, asking for ${ask}. She did not give out any details.`;
-    if (FO_MODE === 'real' && FO_ENDPOINT) {
-        try {
-            const res = await fetch(FO_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: foText }),
-                signal: AbortSignal.timeout(10000),
-            });
-            if (!res.ok) throw new Error(`Fo responded ${res.status}`);
-            action('fo_task', 'done', foText);
-        } catch (err) {
-            console.error(`[${callSid}] Fo send failed:`, err.message);
-            action('fo_task', 'failed', foText);
-        }
-    } else {
-        action('fo_task', 'done', foText);
-    }
-
-    // 4. Fraud report: a draft on screen only. Never submitted anywhere.
+    // 3. Fraud report: a draft on screen only. Never submitted anywhere.
     action('report_draft', 'running');
     const draft = [
         'FRAUD REPORT DRAFT (not submitted)',
