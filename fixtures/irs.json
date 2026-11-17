@@ -1,0 +1,16 @@
+{
+  "name": "IRS gift-card scam (must trigger)",
+  "lines": [
+    { "speaker": "scammer", "text": "Hello, this is Officer Daniel Morgan with the Internal Revenue Service, badge number 4 4 7 1 9." },
+    { "speaker": "grandma", "text": "Oh. Hello? The what service?" },
+    { "speaker": "scammer", "text": "Ma'am, our records show you owe three thousand four hundred dollars in back taxes, and a warrant has been issued for your arrest." },
+    { "speaker": "grandma", "text": "A warrant? Oh my goodness." },
+    { "speaker": "scammer", "text": "You must settle this today or the police will be at your home within the hour. Do not hang up and do not tell anyone about this call." },
+    { "speaker": "scammer", "text": "The only way to stop the warrant is to go to the store right now, buy gift cards for the full amount, and read me the numbers on the back." },
+    { "speaker": "grandma", "text": "Sorry dear, I dropped the phone. Who did you say this was?" },
+    { "speaker": "scammer", "text": "This is the IRS, ma'am. You need to buy the gift cards right now. Stay on the line with me." },
+    { "speaker": "grandma", "text": "Gift cards... are those the ones with the little cat on them? My Whiskers would like those." },
+    { "speaker": "scammer", "text": "Ma'am, focus. When you have the cards, call me back directly at 2 0 2 5 5 5 0 1 4 7 and read me the codes." },
+    { "speaker": "grandma", "text": "Let me find my pen, dear. Was that a seven or an eleven?" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Normal pharmacy call (must NOT trigger)",
+  "lines": [
+    { "speaker": "scammer", "text": "Hi, this is Jenna calling from Maple Street Pharmacy." },
+    { "speaker": "grandma", "text": "Oh hello Jenna." },
+    { "speaker": "scammer", "text": "I'm just calling to let you know your blood pressure prescription is ready for pickup." },
+    { "speaker": "scammer", "text": "We're open until eight tonight, and nine to five tomorrow." },
+    { "speaker": "grandma", "text": "Lovely, I'll come by tomorrow morning." },
+    { "speaker": "scammer", "text": "Perfect. Your copay is the usual ten dollars, you can pay at the counter when you come in." },
+    { "speaker": "scammer", "text": "Also, your doctor approved two more refills, so you're all set through the spring." },
+    { "speaker": "scammer", "text": "Okay, have a nice day. Bye now." }
+  ]
+}
